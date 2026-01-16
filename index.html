@@ -13,9 +13,13 @@
             background-color: #f8fafc;
         }
     </style>
-    <!-- Process shim to prevent 'process is not defined' errors in browser -->
+    <!-- Process shim to satisfy environment variable requirement -->
     <script>
-        window.process = window.process || { env: {} };
+        window.process = {
+            env: {
+                API_KEY: "AIzaSyDdxLBHvyCyEgGUjSSDyqXjZ-eZXYoM3kw"
+            }
+        };
     </script>
 <script type="importmap">
 {

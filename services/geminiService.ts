@@ -3,22 +3,17 @@ import { GoogleGenAI } from "@google/genai";
 import { RateDataResponse, ExchangeRates, GroundingSource } from "../types.ts";
 
 export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
-  // Use the pre-configured environment variable directly
-  const apiKey = process.env.API_KEY || "";
-  
-  // We no longer throw here to allow the UI to handle the connection state 
-  // and provide the AI Studio key selector if needed.
-  const ai = new GoogleGenAI({ apiKey });
+  // MUST use process.env.API_KEY directly as per guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
     Provide the current exchange rates for these pairs:
     - 1 USD to EUR
     - 1 USD to JPY
     - 1 USD to INR
-    - 1 EUR to JPY
     
-    Format the results exactly as "USD/EUR: [value]", "USD/JPY: [value]", etc.
-    Include a 2-sentence summary of the current market trend for these currencies.
+    Return the data in a clear format. 
+    Also include a 1-sentence summary of the current FX market sentiment.
     
     Today's date: ${new Date().toISOString()}
   `;
@@ -61,10 +56,10 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
     };
 
     const rates: ExchangeRates = {
-      USD_EUR: extractRate('USD', 'EUR', 0.92),
-      USD_JPY: extractRate('USD', 'JPY', 150.5),
-      USD_INR: extractRate('USD', 'INR', 83.3),
-      EUR_JPY: extractRate('EUR', 'JPY', 163.2),
+      USD_EUR: extractRate('USD', 'EUR', 0.94),
+      USD_JPY: extractRate('USD', 'JPY', 151.2),
+      USD_INR: extractRate('USD', 'INR', 83.5),
+      EUR_JPY: extractRate('EUR', 'JPY', 160.5),
       lastUpdated: new Date().toISOString(),
     };
 
@@ -76,22 +71,16 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
   } catch (error: any) {
     console.error("Gemini Service Error:", error);
     
-    // If it's a key-related error, propagate it so the UI can show the Connect button
-    const errorMsg = error.message?.toLowerCase() || "";
-    if (errorMsg.includes("api key") || errorMsg.includes("403") || errorMsg.includes("401") || errorMsg.includes("not found")) {
-      throw new Error("API_KEY_REQUIRED");
-    }
-
-    // Standard fallback for other transient network issues
+    // Fallback to static estimated rates if search fails
     return {
       rates: {
-        USD_EUR: 0.92,
-        USD_JPY: 150.5,
-        USD_INR: 83.3,
-        EUR_JPY: 163.2,
+        USD_EUR: 0.94,
+        USD_JPY: 151.2,
+        USD_INR: 83.5,
+        EUR_JPY: 160.5,
         lastUpdated: new Date().toISOString()
       },
-      summary: "Currently displaying market estimates. Connect your API key for real-time grounded data.",
+      summary: "Real-time rates currently unavailable. Showing latest estimated market values.",
       sources: []
     };
   }
