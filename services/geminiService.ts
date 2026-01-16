@@ -3,14 +3,14 @@ import { GoogleGenAI } from "@google/genai";
 import { RateDataResponse, ExchangeRates, GroundingSource } from "../types.ts";
 
 export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
-  // Use window.process.env if process is not globally defined (handled by shim in index.html)
-  const env = (window as any).process?.env || {};
-  const apiKey = env.API_KEY || "";
+  // Always fetch the API key fresh from the environment to support late-binding after user selection
+  const apiKey = (window as any).process?.env?.API_KEY;
   
   if (!apiKey) {
-    throw new Error("API Key is missing. Please ensure your environment variable API_KEY is set.");
+    throw new Error("API Key is missing. Please select an API key via the setup button.");
   }
   
+  // Create instance right before use to ensure correct key
   const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
@@ -76,9 +76,15 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
       summary: text,
       sources
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Service Error:", error);
-    // Provide fallback data in case of complete failure
+    
+    // Check for "Requested entity was not found" error specifically
+    if (error.message?.includes("Requested entity was not found")) {
+      throw error; // Re-throw so App.tsx can handle it by resetting the key state
+    }
+
+    // Provide fallback data for other types of errors
     return {
       rates: {
         USD_EUR: 0.92,

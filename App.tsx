@@ -10,8 +10,33 @@ const App: React.FC = () => {
     summary: string;
     sources: GroundingSource[];
   } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsKey, setNeedsKey] = useState(false);
+
+  // Check if API key is available on mount
+  useEffect(() => {
+    const checkApiKey = async () => {
+      const apiKey = (window as any).process?.env?.API_KEY;
+      if (!apiKey) {
+        setNeedsKey(true);
+      } else {
+        loadRates();
+      }
+    };
+    checkApiKey();
+  }, []);
+
+  const handleOpenKeySelector = async () => {
+    if ((window as any).aistudio?.openSelectKey) {
+      await (window as any).aistudio.openSelectKey();
+      // Proceed immediately as per instructions
+      setNeedsKey(false);
+      loadRates();
+    } else {
+      setError("API Key selector is unavailable in this environment.");
+    }
+  };
 
   const loadRates = useCallback(async () => {
     setIsLoading(true);
@@ -20,21 +45,59 @@ const App: React.FC = () => {
       const result = await fetchCurrentRates();
       setData(result);
     } catch (err: any) {
-      setError(err?.message || "Failed to fetch current exchange rates. Please check your connection.");
+      const msg = err?.message || "";
+      if (msg.includes("Requested entity was not found")) {
+        // Reset key state if the selected key is invalid or from an unpaid project
+        setNeedsKey(true);
+        setError("The selected API key was not found or is invalid. Please select a key from a paid GCP project.");
+      } else {
+        setError(msg || "Failed to fetch current exchange rates. Please check your connection.");
+      }
       console.error("App Error:", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadRates();
-  }, [loadRates]);
-
   const cleanSummary = (summary: string | undefined) => {
     if (!summary) return "No market summary available at this time.";
     return summary.replace(/```json[\s\S]*?```/g, '').replace(/```[\s\S]*?```/g, '').trim();
   };
+
+  if (needsKey) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-slate-100 text-center space-y-6">
+          <div className="bg-blue-50 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+            <svg className="w-10 h-10 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-slate-900">API Key Required</h1>
+            <p className="text-slate-500 text-sm leading-relaxed">
+              To fetch live currency rates and market insights via Gemini Search Grounding, you need to select an API key from a paid GCP project.
+            </p>
+          </div>
+          <button 
+            onClick={handleOpenKeySelector}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-95 flex items-center justify-center space-x-2"
+          >
+            <span>Connect Gemini API</span>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          </button>
+          <div className="pt-4 border-t border-slate-100">
+            <p className="text-xs text-slate-400">
+              Need help? View the <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline font-medium">billing documentation</a>.
+            </p>
+          </div>
+          {error && <p className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded-lg">{error}</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
