@@ -3,13 +3,11 @@ import { GoogleGenAI } from "@google/genai";
 import { RateDataResponse, ExchangeRates, GroundingSource } from "../types.ts";
 
 export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
-  // Accessing the API key exclusively from the environment variable as per guidelines
-  const apiKey = process.env.API_KEY;
+  // Use the pre-configured environment variable directly
+  const apiKey = process.env.API_KEY || "";
   
-  if (!apiKey) {
-    throw new Error("Configuration Error: API_KEY environment variable is not defined.");
-  }
-  
+  // We no longer throw here to allow the UI to handle the connection state 
+  // and provide the AI Studio key selector if needed.
   const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
@@ -78,12 +76,13 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
   } catch (error: any) {
     console.error("Gemini Service Error:", error);
     
-    // Propagate configuration errors
-    if (error.message?.includes("API_KEY") || error.message?.includes("403") || error.message?.includes("401")) {
-      throw error;
+    // If it's a key-related error, propagate it so the UI can show the Connect button
+    const errorMsg = error.message?.toLowerCase() || "";
+    if (errorMsg.includes("api key") || errorMsg.includes("403") || errorMsg.includes("401") || errorMsg.includes("not found")) {
+      throw new Error("API_KEY_REQUIRED");
     }
 
-    // Standard fallback for transient network issues
+    // Standard fallback for other transient network issues
     return {
       rates: {
         USD_EUR: 0.92,
@@ -92,7 +91,7 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
         EUR_JPY: 163.2,
         lastUpdated: new Date().toISOString()
       },
-      summary: "Currently using cached market data. Live updates are temporarily unavailable.",
+      summary: "Currently displaying market estimates. Connect your API key for real-time grounded data.",
       sources: []
     };
   }

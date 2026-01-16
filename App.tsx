@@ -12,17 +12,23 @@ const App: React.FC = () => {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isKeyRequired, setIsKeyRequired] = useState(false);
 
   const loadRates = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setIsKeyRequired(false);
     
     try {
       const result = await fetchCurrentRates();
       setData(result);
     } catch (err: any) {
       console.error("App Error:", err);
-      setError(err?.message || "An unexpected error occurred while fetching live rates.");
+      if (err.message === "API_KEY_REQUIRED") {
+        setIsKeyRequired(true);
+      } else {
+        setError(err?.message || "An unexpected error occurred while fetching live rates.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -31,6 +37,16 @@ const App: React.FC = () => {
   useEffect(() => {
     loadRates();
   }, [loadRates]);
+
+  const handleConnect = async () => {
+    if ((window as any).aistudio?.openSelectKey) {
+      await (window as any).aistudio.openSelectKey();
+      setIsKeyRequired(false);
+      loadRates();
+    } else {
+      setError("To use this app on Vercel, please add your API_KEY to the Environment Variables in the Vercel Dashboard.");
+    }
+  };
 
   const cleanSummary = (summary: string | undefined) => {
     if (!summary) return "No market summary available at this time.";
@@ -54,8 +70,37 @@ const App: React.FC = () => {
           </p>
         </header>
 
+        {/* API Key Connection UI */}
+        {isKeyRequired && (
+          <div className="bg-white border border-blue-200 p-8 rounded-3xl flex flex-col items-center text-center space-y-6 shadow-xl animate-in fade-in zoom-in duration-300 max-w-lg mx-auto">
+            <div className="bg-blue-50 p-4 rounded-2xl">
+              <svg className="w-10 h-10 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-slate-900">Connect to Market Data</h2>
+              <p className="text-slate-500 text-sm">To fetch live currency rates, you need to provide a Gemini API Key. If you are on Vercel, add it to your Environment Variables.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <button 
+                onClick={handleConnect} 
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg active:scale-95"
+              >
+                Connect API Key
+              </button>
+              <button 
+                onClick={loadRates} 
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-4 rounded-2xl transition-all active:scale-95"
+              >
+                Retry Load
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Error State */}
-        {error && (
+        {error && !isKeyRequired && (
           <div className="bg-white border border-red-200 p-6 rounded-3xl flex flex-col items-center space-y-4 shadow-sm animate-in fade-in duration-300">
             <div className="bg-red-50 p-3 rounded-full">
               <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -63,7 +108,7 @@ const App: React.FC = () => {
               </svg>
             </div>
             <div className="text-center">
-              <h3 className="text-lg font-bold text-slate-900">Connection Failed</h3>
+              <h3 className="text-lg font-bold text-slate-900">Something went wrong</h3>
               <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">{error}</p>
             </div>
             <button 
@@ -87,7 +132,7 @@ const App: React.FC = () => {
         )}
 
         {/* Content Section */}
-        {data && (
+        {data && !isKeyRequired && (
           <div className={`space-y-8 transition-opacity duration-700 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
             <CurrencyConverter 
               rates={data.rates} 
