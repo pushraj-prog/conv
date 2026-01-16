@@ -3,14 +3,13 @@ import { GoogleGenAI } from "@google/genai";
 import { RateDataResponse, ExchangeRates, GroundingSource } from "../types.ts";
 
 export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
-  // Always fetch the API key fresh from the environment to support late-binding after user selection
-  const apiKey = (window as any).process?.env?.API_KEY;
+  // Accessing the API key exclusively from the environment variable as per guidelines
+  const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    throw new Error("API Key is missing. Please select an API key via the setup button.");
+    throw new Error("Configuration Error: API_KEY environment variable is not defined.");
   }
   
-  // Create instance right before use to ensure correct key
   const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
@@ -79,12 +78,12 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
   } catch (error: any) {
     console.error("Gemini Service Error:", error);
     
-    // Check for "Requested entity was not found" error specifically
-    if (error.message?.includes("Requested entity was not found")) {
-      throw error; // Re-throw so App.tsx can handle it by resetting the key state
+    // Propagate configuration errors
+    if (error.message?.includes("API_KEY") || error.message?.includes("403") || error.message?.includes("401")) {
+      throw error;
     }
 
-    // Provide fallback data for other types of errors
+    // Standard fallback for transient network issues
     return {
       rates: {
         USD_EUR: 0.92,
@@ -93,7 +92,7 @@ export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
         EUR_JPY: 163.2,
         lastUpdated: new Date().toISOString()
       },
-      summary: "Currently experiencing issues fetching live data. Using recent fallback rates.",
+      summary: "Currently using cached market data. Live updates are temporarily unavailable.",
       sources: []
     };
   }

@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { CurrencyCode, ExchangeRates } from '../types.ts';
 
-// Icons defined as functions to ensure they are hoisted and available throughout the component
 function ArrowPathIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={className}>
@@ -53,8 +52,6 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
   const [amount, setAmount] = useState<string>('1');
   const [fromCurrency, setFromCurrency] = useState<CurrencyCode>('USD');
   const [toCurrency, setToCurrency] = useState<CurrencyCode>('INR');
-  
-  // Manual Rate Override States
   const [isEditingRate, setIsEditingRate] = useState(false);
   const [manualRate, setManualRate] = useState<string>('');
   const [overriddenRate, setOverriddenRate] = useState<{from: string, to: string, rate: number} | null>(null);
@@ -63,15 +60,15 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
   
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Dynamically derive available currencies from the rates object keys with fallback
   const availableCurrencies = useMemo(() => {
+    // Explicitly include USD at the start to ensure it's always selectable
     const currencies = new Set<CurrencyCode>(['USD', 'EUR', 'JPY', 'INR']);
     if (rates) {
-      (Object.keys(rates) as Array<keyof ExchangeRates>).forEach(key => {
-        if (typeof key === 'string' && key.includes('_')) {
+      Object.keys(rates).forEach(key => {
+        if (key.includes('_')) {
           const parts = key.split('_') as CurrencyCode[];
           parts.forEach(p => {
-            if (p && ['USD', 'EUR', 'JPY', 'INR'].includes(p)) currencies.add(p);
+            if (['USD', 'EUR', 'JPY', 'INR'].includes(p)) currencies.add(p);
           });
         }
       });
@@ -79,38 +76,17 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
     return Array.from(currencies);
   }, [rates]);
 
-  // Only reset override if the current pair no longer matches the override's pair.
-  useEffect(() => {
-    if (overriddenRate) {
-      if (fromCurrency !== overriddenRate.from || toCurrency !== overriddenRate.to) {
-        setOverriddenRate(null);
-      }
-    }
-  }, [fromCurrency, toCurrency, overriddenRate]);
-
-  // Auto-focus and select input when editing starts
-  useEffect(() => {
-    if (isEditingRate && editInputRef.current) {
-      editInputRef.current.focus();
-      editInputRef.current.select();
-    }
-  }, [isEditingRate]);
-
   const convert = (val: number, from: CurrencyCode, to: CurrencyCode): number => {
     if (from === to) return val;
-    
-    // Check if we have a manual override for this specific pair
     if (overriddenRate && overriddenRate.from === from && overriddenRate.to === to) {
       return val * overriddenRate.rate;
     }
 
-    // Standard conversion logic using Gemini rates
     let usdAmount = val;
     if (from === 'EUR') usdAmount = val / (rates.USD_EUR || 0.92);
     if (from === 'JPY') usdAmount = val / (rates.USD_JPY || 150.0);
     if (from === 'INR') usdAmount = val / (rates.USD_INR || 83.0);
 
-    // Convert from USD to target
     if (to === 'USD') return usdAmount;
     if (to === 'EUR') return usdAmount * (rates.USD_EUR || 0.92);
     if (to === 'JPY') return usdAmount * (rates.USD_JPY || 150.0);
@@ -121,13 +97,8 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
 
   const result = useMemo(() => {
     const num = parseFloat(amount);
-    if (isNaN(num)) return 0;
-    return convert(num, fromCurrency, toCurrency);
+    return isNaN(num) ? 0 : convert(num, fromCurrency, toCurrency);
   }, [amount, fromCurrency, toCurrency, rates, overriddenRate]);
-
-  const liveRateValue = useMemo(() => {
-    return convert(1, fromCurrency, toCurrency);
-  }, [fromCurrency, toCurrency, rates]);
 
   const handleSwap = () => {
     const temp = fromCurrency;
@@ -136,121 +107,43 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
   };
 
   const handleFromCurrencyChange = (newFrom: CurrencyCode) => {
-    if (newFrom === toCurrency) {
-      // Auto-swap if user picks the same currency as the target
-      setToCurrency(fromCurrency);
-    }
+    if (newFrom === toCurrency) setToCurrency(fromCurrency);
     setFromCurrency(newFrom);
   };
 
   const handleToCurrencyChange = (newTo: CurrencyCode) => {
-    if (newTo === fromCurrency) {
-      // Auto-swap if user picks the same currency as the source
-      setFromCurrency(toCurrency);
-    }
+    if (newTo === fromCurrency) setFromCurrency(toCurrency);
     setToCurrency(newTo);
-  };
-
-  const handleStartEdit = () => {
-    setManualRate((overriddenRate?.rate || liveRateValue).toFixed(6));
-    setRateError(null);
-    setIsEditingRate(true);
-  };
-
-  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setManualRate(e.target.value);
-    if (rateError) setRateError(null);
-  };
-
-  const handleSaveRate = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const newRate = parseFloat(manualRate);
-    
-    if (isNaN(newRate) || newRate <= 0) {
-      setRateError("Rate must be a positive number.");
-      return;
-    }
-
-    // Set the state and then close editing
-    setOverriddenRate({ from: fromCurrency, to: toCurrency, rate: newRate });
-    setRateError(null);
-    setIsEditingRate(false);
-  };
-
-  const confirmResetRate = () => {
-    setOverriddenRate(null);
-    setRateError(null);
-    setIsEditingRate(false);
-    setShowResetConfirm(false);
-  };
-
-  const handleResetRate = () => {
-    if (overriddenRate) {
-      setShowResetConfirm(true);
-    } else {
-      confirmResetRate();
-    }
   };
 
   return (
     <div className="bg-white rounded-3xl shadow-xl p-6 md:p-10 w-full max-w-2xl mx-auto border border-slate-100 relative overflow-hidden">
-      {/* Reset Confirmation Overlay */}
-      {showResetConfirm && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-md z-[60] flex items-center justify-center p-6 animate-in fade-in duration-200">
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl p-6 max-w-sm w-full text-center space-y-4">
-            <div className="bg-amber-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto">
-              <ExclamationCircleIcon className="w-8 h-8 text-amber-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Reset custom rate?</h3>
-              <p className="text-sm text-slate-500 mt-1">
-                Your manual conversion rate for {fromCurrency}/{toCurrency} will be lost and replaced with the current market rate.
-              </p>
-            </div>
-            <div className="flex flex-col space-y-2">
-              <button 
-                onClick={confirmResetRate}
-                className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition-colors"
-              >
-                Yes, reset to market
-              </button>
-              <button 
-                onClick={() => setShowResetConfirm(false)}
-                className="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
-              >
-                Keep my rate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl font-bold text-gray-800">Currency Converter</h2>
         <div className="hidden sm:block text-xs font-medium text-slate-400">
-          Last updated: {rates?.lastUpdated ? new Date(rates.lastUpdated).toLocaleTimeString() : 'Updating...'}
+          Last updated: {rates?.lastUpdated ? new Date(rates.lastUpdated).toLocaleTimeString() : 'Live'}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
-        <div className="md:col-span-3 space-y-2">
+        <div className="md:col-span-3 space-y-2 relative">
           <label className="block text-sm font-medium text-gray-500">Amount</label>
-          <div className="relative group">
+          <div className="relative group flex items-center">
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-4 pr-24 py-4 text-xl font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-4 pr-28 py-4 text-xl font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
               placeholder="0.00"
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+            <div className="absolute right-2 z-20">
               <select 
                 value={fromCurrency}
                 onChange={(e) => handleFromCurrencyChange(e.target.value as CurrencyCode)}
-                className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 font-bold text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all hover:bg-slate-50"
+                className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 font-bold text-gray-700 cursor-pointer hover:bg-slate-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {availableCurrencies.map(curr => (
-                  <option key={curr} value={curr}>{curr}</option>
+                  <option key={curr} value={curr} className="text-slate-900 font-medium">{curr}</option>
                 ))}
               </select>
             </div>
@@ -260,27 +153,26 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
         <div className="md:col-span-1 flex justify-center pb-2">
           <button 
             onClick={handleSwap}
-            aria-label="Swap Currencies"
             className="p-3 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-all border border-blue-100 shadow-sm active:scale-90"
           >
             <ArrowsRightLeftIcon className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="md:col-span-3 space-y-2">
+        <div className="md:col-span-3 space-y-2 relative">
           <label className="block text-sm font-medium text-gray-500">Converted To</label>
-          <div className="relative group">
-            <div className={`w-full ${overriddenRate ? 'bg-indigo-600' : 'bg-blue-600'} border border-blue-700 text-white rounded-xl pl-4 pr-24 py-4 text-xl font-bold min-h-[66px] flex items-center shadow-lg transition-colors overflow-hidden`}>
+          <div className="relative group flex items-center">
+            <div className={`w-full ${overriddenRate ? 'bg-indigo-600' : 'bg-blue-600'} border border-blue-700 text-white rounded-xl pl-4 pr-28 py-4 text-xl font-bold min-h-[66px] flex items-center shadow-lg`}>
               {result.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+            <div className="absolute right-2 z-20">
               <select 
                 value={toCurrency}
                 onChange={(e) => handleToCurrencyChange(e.target.value as CurrencyCode)}
-                className="bg-white/10 backdrop-blur-md border border-white/30 rounded-lg py-1.5 px-3 font-bold text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/50 shadow-sm transition-all hover:bg-white/20"
+                className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 font-bold text-gray-700 cursor-pointer hover:bg-slate-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {availableCurrencies.map(curr => (
-                  <option key={curr} value={curr} className="text-gray-800">{curr}</option>
+                  <option key={curr} value={curr} className="text-slate-900 font-medium">{curr}</option>
                 ))}
               </select>
             </div>
@@ -288,103 +180,15 @@ const CurrencyConverter: React.FC<Props> = ({ rates, onRefresh, isLoading }) => 
         </div>
       </div>
 
-      <div className="mt-8 flex flex-col space-y-4">
-        {/* Manual Rate Edit Area */}
-        <div className={`rounded-2xl p-4 border transition-all ${isEditingRate ? (rateError ? 'bg-red-50 border-red-200 ring-2 ring-red-100' : 'bg-blue-50 border-blue-200 ring-2 ring-blue-100') : 'bg-slate-50 border-slate-100'}`}>
-          {isEditingRate ? (
-            <form onSubmit={handleSaveRate} className="flex flex-col space-y-3">
-              <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4">
-                <div className="flex-1 space-y-1 w-full">
-                  <label className={`text-[10px] uppercase tracking-wider font-bold ${rateError ? 'text-red-500' : 'text-blue-500'}`}>
-                    Custom Conversion Rate
-                  </label>
-                  <div className="flex items-center space-x-2 text-sm text-slate-700 font-medium">
-                    <span className="shrink-0">1 {fromCurrency} = </span>
-                    <input 
-                      ref={editInputRef}
-                      type="number"
-                      step="any"
-                      value={manualRate}
-                      onChange={handleRateChange}
-                      className={`bg-white border-2 rounded-lg px-3 py-2 w-full sm:w-32 font-bold outline-none text-base shadow-inner transition-all ${rateError ? 'border-red-400 focus:border-red-500 text-red-600' : 'border-blue-200 focus:border-blue-500 text-blue-700'}`}
-                      placeholder="Enter rate"
-                    />
-                    <span className="shrink-0">{toCurrency}</span>
-                  </div>
-                </div>
-                <div className="flex space-x-2 w-full sm:w-auto self-end">
-                  <button 
-                    type="submit"
-                    className="flex-1 sm:flex-none bg-blue-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center space-x-1 shadow-md hover:shadow-lg active:scale-95"
-                  >
-                    <CheckIcon className="w-4 h-4" />
-                    <span>Apply</span>
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => { setIsEditingRate(false); setRateError(null); }}
-                    className="flex-1 sm:flex-none bg-white text-slate-500 text-sm font-bold px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition-all active:scale-95"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-              {rateError && (
-                <div className="flex items-center space-x-1 text-red-600 text-xs font-semibold animate-pulse">
-                  <ExclamationCircleIcon className="w-4 h-4" />
-                  <span>{rateError}</span>
-                </div>
-              )}
-            </form>
-          ) : (
-            <div className="flex justify-between items-center">
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Current Conversion Rate</span>
-                <div className="flex items-center space-x-2">
-                  <span className="text-slate-800 font-semibold text-base">
-                    1 {fromCurrency} = {(overriddenRate?.rate || liveRateValue).toFixed(4)} {toCurrency}
-                  </span>
-                  {overriddenRate && (
-                    <span className="bg-indigo-100 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
-                      User Defined
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button 
-                onClick={handleStartEdit}
-                className="bg-white text-blue-600 border border-blue-100 hover:bg-blue-50 px-3 py-2 rounded-xl transition-all flex items-center space-x-2 shadow-sm active:scale-95 font-bold text-xs"
-              >
-                <PencilSquareIcon className="w-4 h-4" />
-                <span>Edit Rate</span>
-              </button>
-            </div>
-          )}
-        </div>
-
+      <div className="mt-8">
         <button
           onClick={onRefresh}
           disabled={isLoading}
-          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center space-x-3 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-md hover:shadow-lg mt-2"
+          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center space-x-3 transition-all active:scale-[0.98] disabled:opacity-70 shadow-md"
         >
           <ArrowPathIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          <span>{isLoading ? 'Updating Market Rates...' : 'Refresh Live Data'}</span>
+          <span>{isLoading ? 'Updating Market Data...' : 'Refresh Market Rates'}</span>
         </button>
-
-        <div className="pt-2 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-500 space-y-2 sm:space-y-0">
-          <div className="flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-amber-400' : 'bg-green-500 animate-pulse'}`}></span>
-            <span>{isLoading ? 'Fetching Latest Data...' : 'Gemini AI Grounding Active'}</span>
-          </div>
-          {overriddenRate && (
-            <button 
-              onClick={handleResetRate}
-              className="text-xs text-indigo-600 font-bold hover:underline bg-indigo-50 px-2 py-1 rounded-md"
-            >
-              Reset to Market Rate
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
