@@ -1,11 +1,14 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { RateDataResponse, ExchangeRates, GroundingSource } from "../types";
+import { RateDataResponse, ExchangeRates, GroundingSource } from "../types.ts";
 
 export const fetchCurrentRates = async (): Promise<RateDataResponse> => {
-  const apiKey = process.env.API_KEY || "";
+  // Use window.process.env if process is not globally defined (handled by shim in index.html)
+  const env = (window as any).process?.env || {};
+  const apiKey = env.API_KEY || "";
+  
   if (!apiKey) {
-    throw new Error("API Key is missing. Please ensure process.env.API_KEY is available.");
+    throw new Error("API Key is missing. Please ensure your environment variable API_KEY is set.");
   }
   
   const ai = new GoogleGenAI({ apiKey });

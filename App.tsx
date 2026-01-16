@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import CurrencyConverter from './components/CurrencyConverter';
-import { fetchCurrentRates } from './services/geminiService';
-import { ExchangeRates, GroundingSource } from './types';
+import CurrencyConverter from './components/CurrencyConverter.tsx';
+import { fetchCurrentRates } from './services/geminiService.ts';
+import { ExchangeRates, GroundingSource } from './types.ts';
 
 const App: React.FC = () => {
   const [data, setData] = useState<{

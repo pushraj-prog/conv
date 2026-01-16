@@ -13,6 +13,10 @@
             background-color: #f8fafc;
         }
     </style>
+    <!-- Process shim to prevent 'process is not defined' errors in browser -->
+    <script>
+        window.process = window.process || { env: {} };
+    </script>
 <script type="importmap">
 {
   "imports": {
@@ -27,5 +31,6 @@
 </head>
 <body>
     <div id="root"></div>
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>
